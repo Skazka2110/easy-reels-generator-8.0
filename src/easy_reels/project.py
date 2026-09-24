@@ -1,0 +1,134 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+from .errors import ProjectError
+from .excel import create_workbook_template
+from .paths import ProjectPaths
+
+
+DEFAULT_SETTINGS_INI = """# Easy Reels Generator 0.8.0 — настройки проекта.
+# Обычно эти значения изменяются через кнопку «Настроить ролики» в программе.
+
+[general]
+# Положение всего текстового блока — и хука, и подхука, если он заполнен.
+# top = текст сверху, используются видео из папки videos/top.
+# bottom = текст снизу, используются видео из папки videos/bottom.
+hook_position = bottom
+
+# Как брать фрагмент из музыки, если трек длиннее ролика.
+# start = с начала трека. random = со случайного места.
+music_fragment = start
+
+# Целевая громкость музыки в LUFS. Допустимо от -30 до -5.
+# -10 = громче, -14 = стандартно, -18 = тише.
+music_loudness_lufs = -14
+
+[hook]
+# Точное имя файла шрифта из папки fonts.
+# Доступно: Roboto-Black.ttf, Roboto-Bold.ttf, Roboto-Medium.ttf,
+# Roboto-Regular.ttf, Montserrat-Black.ttf, Montserrat-Bold.ttf,
+# Manrope-ExtraBold.ttf, Manrope-Bold.ttf, Oswald-Bold.ttf, Oswald-Medium.ttf.
+# Можно положить свой файл .ttf или .otf в папку fonts и указать здесь его точное имя.
+# Для короткого мощного хука: Roboto-Black, Montserrat-Black или Manrope-ExtraBold.
+# Для длинного хука: Oswald-Bold занимает меньше места по ширине.
+font = Roboto-Black.ttf
+
+# Начальный размер шрифта в пикселях. Допустимо от 1 до 400.
+# Если текст не помещается, программа сама немного уменьшит его.
+# Расстояние между строками рассчитывается автоматически по реальным границам
+# выбранного шрифта и его итоговому размеру.
+font_size = 90
+
+# Цвет текста в формате #RRGGBB. Примеры: #111111, #FFFFFF, #39FF88.
+text_color = #111111
+
+# Толщина обводки букв: от 0 до 30 px.
+# В режиме outline значение 0 включает автоматическую толщину 6 px.
+# В остальных режимах 0 отключает дополнительную обводку букв.
+outline_width = 0
+# Цвет обводки в формате #RRGGBB.
+outline_color = #000000
+
+# Вид подложки или текстового эффекта. Допустимые варианты:
+# torn_paper = рваная бумага; paper_letters = бумажка под каждым символом;
+# rectangle = единый прямоугольник;
+# lines = отдельная подложка под каждой строкой;
+# outline = обводка вокруг букв без подложки;
+# glow = мягкое свечение вокруг букв без подложки;
+# none = без подложки и без эффекта.
+background_style = torn_paper
+# Следующие параметры background_* настраивают только подложки
+# torn_paper, paper_letters, rectangle и lines. Для outline используются outline_*,
+# для glow — параметры glow_* ниже.
+# Цвет подложки в формате #RRGGBB.
+background_color = #FFFFFF
+# Прозрачность подложки: 0 = невидимая, 100 = непрозрачная.
+background_opacity = 90
+# Внутренний отступ между текстом и краями подложки: от 0 до 200 px.
+background_padding = 18
+# Скругление углов прямоугольных подложек: от 0 до 200 px.
+background_corner_radius = 12
+
+# Параметры используются только при background_style = glow.
+# Цвет свечения в формате #RRGGBB.
+glow_color = #39FF88
+# Сила свечения: 0 = невидимое, 100 = максимальное.
+glow_opacity = 80
+# Радиус размытия свечения: от 1 до 100 px. Обычно достаточно 8–30 px.
+glow_radius = 18
+
+[subhook]
+# Настройки подхука. Если подхук в редакторе пустой, этот блок не выводится.
+# Можно выбрать любой из шрифтов, перечисленных выше в разделе [hook].
+font = Roboto-Bold.ttf
+
+# Начальный размер подхука в пикселях. Допустимо от 1 до 400.
+font_size = 52
+
+# Цвет текста подхука в формате #RRGGBB.
+text_color = #111111
+
+# Толщина и цвет обводки подхука. Для outline значение 0 = автоматически 6 px.
+outline_width = 0
+outline_color = #000000
+
+# Подложка/эффект: torn_paper, paper_letters, rectangle, lines,
+# outline, glow или none.
+background_style = torn_paper
+# Параметры background_* относятся к подложкам, а не к outline/glow.
+# Цвет и прозрачность подложки подхука.
+background_color = #FFFFFF
+background_opacity = 85
+# Отступ от текста до подложки и скругление углов в пикселях.
+background_padding = 12
+background_corner_radius = 10
+
+# Настройки свечения подхука; используются только для режима glow.
+glow_color = #39FF88
+glow_opacity = 80
+glow_radius = 14
+
+# Анимация появления подхука:
+# none = подхук виден с начала ролика;
+# slide_bounce = вылет снизу с мягким отскоком;
+# zoom_bounce = появление из точки через увеличение с отскоком.
+animation = none
+# Секунда начала анимации: от 0.0 до 5.5. При animation = none не используется.
+appear_at = 3.0
+"""
+
+
+def initialize_project(root: str | Path) -> ProjectPaths:
+    paths = ProjectPaths.from_root(root)
+    paths.ensure_directories()
+    if paths.settings.exists() or paths.workbook.exists():
+        raise ProjectError(
+            "Проект не создан: settings.ini или hooks.xlsx уже существует в выбранной папке."
+        )
+    try:
+        paths.settings.write_text(DEFAULT_SETTINGS_INI, encoding="utf-8")
+        create_workbook_template(paths.workbook)
+    except OSError as exc:
+        raise ProjectError(f"Не удалось создать файлы проекта: {exc}") from exc
+    return paths
