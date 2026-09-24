@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.test-venv/
+.windows-build-venv/
+.macos-build-venv-*/
+.windows-build-cache/
+build/
+artifacts/
+packaging/macos/easy-reels.icns
+.DS_Store
